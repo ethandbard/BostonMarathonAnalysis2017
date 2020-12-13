@@ -1,0 +1,234 @@
+---
+title: "Data Mining and Text Mining Final Project"
+subtitle: "Analysis of 2017 Boston Marathon Data"
+author: "Ethan Bard, ebard4264@floridapoly.edu"
+output: html_notebook
+---
+
+### Introduction
+
+Since 1897, the Boston Marathon is an annual marathon race hosted by several cities in the Boston area of Massachusetts. Since 2001, the Boston Athletic Association (BAA) has been recording and publicly providing data about runners who successfully finish the marathon. People of all different age groups, sex, and national origins come to compete in this marathon every year and it is always interesting to see who comes out on top. In the following analysis, the data set containing results of the 2017 Boston Marathon will be explored using various data mining techniques in an attempt to learn more about these athletes. 
+
+### Exploratory Analysis
+
+The data set used in this analysis was compiled and provided by Dr. Reinaldo Sanchez-Arias. To begin the analysis, the data is loaded into R and an initial exploratory analysis is performed. Before performing any further analysis, a general understanding of the data must be obtained. 
+
+```{r, message=FALSE}
+#Import libraries
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(ggfortify)
+library(factoextra)
+```
+
+
+```{r,message=FALSE}
+data <- read_csv("https://raw.githubusercontent.com/reisanar/datasets/master/marathon_results_2017.csv")
+```
+
+During the import process, there appear to be some parsing failures related to the column data types. This will be kept in mind while moving forward with the analysis. 
+
+```{r}
+colnames(data)
+```
+
+The column names included in the data set are presented above. Most of the attributes are time recordings at different intervals of the marathon, but data is also present regarding the athlete's age, sex, home country and/or state, and their official time. 
+
+Check the summary statistics of each attributes:
+
+```{r}
+summary(data)
+```
+
+According to the summary above, most of the attributes are of class type "hms" for time recordings, or "character" for personal information. For some reason, the columns 15k, 25k, and 30k are of class "character" as well, which could result in errors if this is not addressed. Additionally, it is not extremely clear what the 'Gender' and 'Division' attributes are meant to represent, so they will likely be removed from this analysis for clarity.
+
+#### Exploratory Visualizations
+
+```{r}
+#rename columns to work with more easily
+data <- data %>% 
+  rename(Sex = 'M/F',
+         Official_time = 'Official Time')
+```
+
+
+```{r}
+#Count of male vs female runners
+ggplot(data = data, aes(x = Sex, fill = Sex)) + 
+  geom_bar(stat = "count", show.legend = FALSE) +
+  labs(title = "Male vs. Female Runners Total", x = "Sex", y = "Count") + 
+  theme_minimal()
+```
+
+```{r}
+#Average age of males vs females
+ggplot(data = data, aes(x = Sex, y = Age, fill = Sex)) + 
+  geom_boxplot() + 
+  labs(title = "Male vs. Female Runners Average Ages", x = "Sex", y = "Average Age") +
+  theme_minimal()
+```
+
+```{r}
+#Average times of males vs females
+ggplot(data = data, aes(x = Sex, y = Official_time, fill = Sex)) + 
+  geom_boxplot() +
+  labs(title = "Male vs. Female Runners Average Times", x = "Sex", y = "Average Time") +
+  theme_minimal()
+```
+
+```{r}
+#Average pace of males vs females
+ggplot(data = data, aes(x = Sex, y = Pace, fill = Sex)) + 
+  geom_boxplot() +
+  labs(title = "Male vs. Female Runners Average Pace", x = "Sex", y = "Average Pace") +
+  theme_minimal()
+```
+
+```{r}
+#Country of Origin
+data %>% 
+  count(.,Country) %>% 
+  arrange(desc(n)) %>%
+  filter(n > 75) %>% 
+  ggplot(.,aes(x = reorder(factor(Country), -n), y = n, fill = Country)) + 
+  geom_bar(stat = "identity", show.legend = FALSE) + 
+  labs(title = "Top Countries", x = "Country", y = "Count") + 
+  theme_minimal()
+```
+
+```{r}
+#State of Origin
+data %>% 
+  count(.,State) %>% 
+  arrange(desc(n)) %>%
+  filter(State != 'NA', n > 30) %>% 
+  ggplot(.,aes(x = reorder(State, -n), y = n, fill = State)) + 
+  geom_bar(stat = "identity", show.legend = FALSE) + 
+  labs(title = "Top States", x = "State", y = "Count") + 
+  theme(axis.text.x=element_text(angle = 45, hjust =1, size =7)) 
+```
+
+```{r}
+ggplot(data = data,
+       aes(x = Age,
+           y = Official_time,
+           color = Sex)) +
+  geom_point(alpha = 0.5) + 
+  theme_minimal() + 
+  labs(title = "Age vs. Official Times", y = "Official Time")
+```
+
+The above visualizations reveal significant information about the population recorded in the dataset. The vast majority of the runners participating in the Boston Marathon in 2017 were from the USA, and of those from the USA the most popular states are MA, CA, NY, and TX. When comparing the performance of runners by sex, it appears that males on average complete the race with a shorter official time than females, and also have a faster pace on average. Additionally, there does not appear to be a significantly obvious visual correlation between age and official time. 
+
+For the next section of this analysis, Principal Component Analysis will be performed in order to reduce the dimensionality of the dataset before performing Clustering. 
+
+### Principal Component Analysis
+
+```{r}
+#Select only continuous attributes
+data_continuous <- data[-c(1,2,4,5,6,7,10,13,14,18,20,21,22)]
+
+#convert time columns to numeric
+cols_to_convert <- c(2,3,4,5,6,7,8,9)
+
+#change records where time was input as '-' to NA
+data_continuous[data_continuous=="-"] <- NA
+
+#remove rows with NA's
+data_continuous<- na.omit(data_continuous)
+
+#convert columns to numeric
+data_continuous[cols_to_convert] <- sapply(data_continuous[cols_to_convert], as.numeric)
+```
+
+
+```{r}
+#Principal Component Analysis
+pca_data <- prcomp(data_continuous)
+summary(pca_data)
+```
+
+
+```{r}
+#Visualization of PCA contributions
+fviz_screeplot(pca_data)
+```
+
+The summary results presented above show that ~98% of the variation in the collection is explained by the first principal components. 
+
+
+```{r}
+#Check loadings
+pca_data$rot[,1]
+```
+
+```{r}
+#Loadings visualization
+fviz_contrib(pca_data, choice = "var", axes = 1) +
+  labs(title = "Contribution of Variables to 1st Principal Component")
+```
+
+```{r}
+autoplot(pca_data, data = data_continuous,
+         loadings = TRUE,
+         loadings.label = TRUE, loadings.label.size = 3)
+```
+
+The loadings in PC1 that contribute the most to the variance are Official time, 40k, 35k, followed closely by Half and 20K. 
+Noticeably, Pace, age, 5k, and 10k contribute significantly less to the variance. This implication of these results suggest that your age, your pace, and your early time recordings are not as important as your later time recordings. Intuitively, this increase in variance is likely due to the fact that a significant amount of people will grow increasingly fatigued throughout the marathon, and if their times are higher in the latter half of the run they are more likely to also have a higher official time. 
+
+
+### Outlier Detection with Clustering 
+
+In this section of the analysis, outliers will be detected by using K-means clustering. By grouping data into clusters, the points not assigned to clusters are considered outliers. 
+
+```{r}
+#reduce dataset to only those identified by PC1 in previous section, keeping age
+data_reduced <- data_continuous[c(1,6,7,9)]
+
+#rename columns
+data_reduced <- data_reduced %>% 
+  rename(
+    thirtyfivek = "35K",
+    fourtyk = "40K"
+  )
+
+#Perform k-means with 3 groups
+kmeans_result <- kmeans(data_reduced,centers = 3)
+
+#get cluster centers
+kmeans_result$centers
+```
+```{r}
+#calculate distances between objects and cluster centers
+centers <- kmeans_result$centers[kmeans_result$cluster,]
+
+#compute euclidean distance
+km_distances <- sqrt(rowSums((data_reduced-centers)^2))
+
+#pick top 10 largest distances
+km_outliers <- order(km_distances, decreasing = T)[1:10]
+```
+
+#### Visualization
+
+```{r}
+#Age vs time by groups, showing outliers
+ggplot()+ 
+  geom_point(data=data_reduced, aes(x = Age, y = Official_time, 
+                 color = factor(kmeans_result$cluster))) + 
+  geom_point(aes(x = unlist(data_reduced[km_outliers, "Age"]), 
+                 y = unlist(data_reduced[km_outliers, "Official_time"])), 
+             color = "black") + 
+  labs(title = "Outlier Detection with Clustering",
+       subtitle = "Age vs. Official Time, 10 outliers",
+       color = "Groups")
+```
+
+Visualization presented above is similar to the one presented in the exploratory analysis section but instead of coloring by male/female, it is colored by cluster. Additionally, points that were not assigned to any cluster are considered outliers and displayed by the black points. A significant piece of information gained by this visualization is that there are no outlier points toward the bottom of the graph which is where the lowest official times are located. This means that there no runners who finished the marathon fast enough to be considered an outlier, but there were runners who completed the marathon slow enough that they are considered significant outliers for their group.
+
+### Conclusion
+
+This dataset is a great collection that reveals a lot of information about the population of runners who completed the Boston Marathon. It has been interesting to see that Sex and Age statistically do not have a significant effect on the expectation of a runner's finishing time in the Boston Marathon. This is likely affected by the fact that the Boston Marathon has certain regulations that create bias in the data, such as runners needing to qualify within a certain time frame before being allowed to compete. Due to the sample size and proportion of runners who were from the United States, there is not much to be learned about a runner's country being a factor. It would be interesting to repeat this analysis on a similar dataset with a completely different population of people and a race that does not have as severe qualifications to compete. 
+
